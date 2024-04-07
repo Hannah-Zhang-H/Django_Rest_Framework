@@ -41,7 +41,7 @@ Mac/Linux: source myenv/bin/activate
 pip install django
 pip install djangorestframework
 -------------------------------------------
-然后再次运行python manage.py runserve 来启动server
+然后再次运行python manage.py runserver 来启动server
 
 6 ---- 补充：
 下次要用的话：
@@ -60,3 +60,92 @@ def __str__(self):
 问题解决啦！
 
 9. 可以添加一个API来share这些添加的movie信息来挣钱----序列化Serializer
+这就是API要做的事情，把这些电影objects转化成JSON或xml
+去movies新增一个file   movies/serializers.py
+为了创建一个序列化器，需要从REST框架倒入序列化器。 创建一个class
+
+10. 创建views 为刚才序列化好的程序创建views
+movies/views.py:
+from .models import Moviedata
+from .serializers import MovieSerializer
+from rest_framework import viewsets
+
+# Create your views here.
+class MovieViewSet(viewsets.ModelViewSet):
+    queryset = Moviedata.objects.all()
+    serializer_class = MovieSerializer
+
+
+
+
+创建好MovieViewSet后，去urls.py添加routers路由
+from django.urls import path, include
+from rest_framework import routers
+from movies.views import *
+
+router = routers.DefaultRouter()
+router.register('movies', MovieViewSet)
+
+urlpatterns = [
+    path('', include(router.urls)),
+    path("admin/", admin.site.urls),
+]
+
+
+11.Adding API Endpoint
+在movies/models.py中添加一个typ用来筛选movie
+    typ = models.CharField(max_length=200, default='action')
+
+继续做数据migration 3个
+
+12. Create a view for action movies, go to movies/views.py
+class ActionViewSet(viewsets.ModelViewSet):
+    queryset = Moviedata.objects.filter(typ='action')
+    serializer_class = MovieSerializer
+
+
+13. go to mysite/urls.py 设置它：
+from django.urls import path, include
+from rest_framework import routers
+from movies.views import *
+
+# router = routers.DefaultRouter()
+router = routers.SimpleRouter()
+router.register('movies', MovieViewSet)
+router.register('action', ActionViewSet, basename='action') # 记得要加basename，否则报错说这两个冲突
+
+
+
+urlpatterns = [
+    path('', include(router.urls)),
+    path("admin/", admin.site.urls),
+]
+
+
+14. 打开url，发现还没有让添加type的一栏，也不显示，
+去movies/serializers.py 在fileds里添加上typ即可
+# 使用 Q 对象进行逻辑或操作，在只有一个过滤条件时，不需要加Q
+queryset = Moviedata.objects.filter(Q(typ='comedy') | Q(typ='Comdy'))
+
+
+15. Add image fields in to your API
+在movies/models.py添加
+    image = models.ImageField(upload_to='Images/', default='Images/default.jpg')
+做migrates
+去serializers.py的filed里加上image, 加image = serializers.ImageField(max_length=None, use_url=True)
+
+在mysite目录下新建folder叫media,告诉Django，所有上传的图片url会加载到这个文件。
+去settings.py添加  MEDIA_ROOT = os.path.join(BASE_DIR, "media") // get the path from my operating system and join with media folder.
+告诉Django去这个路径找你site的所有media文件
+
+再加一条： MEDIA_URL = "/media/"
+
+最后，mysite/urls.py中的path都是dynamic的path，现在我们要把static路径也加进来
+from django.conf.urls.static import static
+from django.conf import settings
+urlpatterns = [
+    path('', include(router.urls)),
+    path("admin/", admin.site.urls),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+Well done, you are pretty much good to go!
